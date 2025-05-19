@@ -2,7 +2,7 @@ name: Update AbuseIPDB Blocklist
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 * * * *'  # Every hour
   workflow_dispatch:
 
 jobs:
@@ -18,31 +18,40 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install dependencies
+      - name: Install Python requests
         run: pip install requests
 
-      - name: Run AbuseIPDB blocklist fetch script
+      - name: Run AbuseIPDB script
         env:
           ABUSEIPDB_API_KEY: ${{ secrets.ABUSEIPDB_API_KEY }}
         run: |
           echo ">>> Running abuseipdb_to_edl.py"
-          python scripts/abuseipdb_to_edl.py
-          echo ">>> Finished. Verifying output:"
-          ls -lh blocklist.txt || echo "blocklist.txt NOT FOUND"
+          python scripts/abuseipdb_to_edl.py || (echo "🔥 Script failed — check API key or AbuseIPDB limits" && exit 1)
+          echo ">>> Checking if blocklist.txt was created"
+          test -f blocklist.txt && echo "✅ blocklist.txt exists" || (echo "❌ blocklist.txt missing" && exit 1)
+
+      - name: Show Git status (debug)
+        run: |
+          git status
+          ls -la
 
       - name: Commit and push updated blocklist
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          echo ">>> Setting Git user info"
-          git config user.name "AbuseIPDB Bot"
-          git config user.email "bot@edl.io"
-          echo ">>> Resetting Git remote to use PAT"
+          echo ">>> Setting Git credentials"
+          git config --global user.name "AbuseIPDB Bot"
+          git config --global user.email "bot@edl.io"
+
+          echo ">>> Rewriting Git remote with PAT"
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
-          echo ">>> Git status:"
-          git status
-          echo ">>> Attempting Git commit"
+          git remote -v
+
+          echo ">>> Staging file"
           git add blocklist.txt || echo "Nothing to add"
+
+          echo ">>> Committing file"
           git commit -m "Update blocklist from AbuseIPDB" || echo "Nothing to commit"
-          echo ">>> Attempting Git push"
+
+          echo ">>> Pushing"
           git push origin HEAD:main
