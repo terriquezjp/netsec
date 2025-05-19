@@ -2,8 +2,8 @@ name: Update AbuseIPDB Blocklist
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Runs every hour
-  workflow_dispatch:      # Allows manual runs
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
 jobs:
   update:
@@ -24,16 +24,25 @@ jobs:
       - name: Run AbuseIPDB blocklist fetch script
         env:
           ABUSEIPDB_API_KEY: ${{ secrets.ABUSEIPDB_API_KEY }}
-        run: python scripts/abuseipdb_to_edl.py
+        run: |
+          echo ">>> Running abuseipdb_to_edl.py"
+          python scripts/abuseipdb_to_edl.py
+          echo ">>> Finished. Verifying output:"
+          ls -lh blocklist.txt || echo "blocklist.txt NOT FOUND"
 
       - name: Commit and push updated blocklist
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          echo ">>> Setting Git user info"
           git config user.name "AbuseIPDB Bot"
           git config user.email "bot@edl.io"
+          echo ">>> Resetting Git remote to use PAT"
+          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
+          echo ">>> Git status:"
+          git status
+          echo ">>> Attempting Git commit"
           git add blocklist.txt || echo "Nothing to add"
           git commit -m "Update blocklist from AbuseIPDB" || echo "Nothing to commit"
-          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
+          echo ">>> Attempting Git push"
           git push origin HEAD:main
-
